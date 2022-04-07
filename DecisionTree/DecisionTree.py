@@ -37,11 +37,12 @@ COMPARISON_FUNCTIONS = {
 class Node:
 
     def __init__(self,
-                 sample=None,
+                 sample_indexes=None,
                  targets=None,
                  depth=None
                  ):
-        self.sample = sample
+
+        self.sample_indexes = sample_indexes
         self.targets = targets
         self.depth = depth
 
@@ -74,11 +75,6 @@ class DecisionTree:
         self.tree = None
 
     @staticmethod
-    def _get_column_from_map(mapping, col_idx):
-        column = [i[col_idx] for i in mapping]
-        return column
-
-    @staticmethod
     def _sorted_mapping(feature_values, target_values):
         nrows = feature_values.shape[0]
         mapping = np.zeros(shape=(nrows, 2))
@@ -88,87 +84,77 @@ class DecisionTree:
         return mapping
 
     @staticmethod
-    def _split(sorted_mapping, split_value):
-        left_sample = sorted_mapping[sorted_mapping[:, 0] <= split_value]
-        right_sample = sorted_mapping[sorted_mapping[:, 0] > split_value]
-        return left_sample, right_sample
+    def _split(feature_values, split_value):
+        left_sample_index = np.where(feature_values <= split_value)[0]
+        right_sample_index = np.where(feature_values > split_value)[0]
+        return left_sample_index, right_sample_index
 
-    @staticmethod
-    def _split_matrix(sample, targets, split_column, split_value):
-        # print('_split_matrix sample ', sample)
-        nrows, ncols = sample.shape
-        new_sample = np.zeros(shape=(nrows, ncols + 1))
-        new_sample[:, :-1] = sample
-        new_sample[:, -1] = targets
-        left_sample = new_sample[new_sample[:, split_column] <= split_value]
-        left_targets = left_sample[:, -1]
-        left_sample = left_sample[:, :-1]
-        right_sample = new_sample[new_sample[:, split_column] > split_value]
-        right_targets = right_sample[:, -1]
-        right_sample = right_sample[:, :-1]
-        return left_sample, left_targets, right_sample, right_targets
+    def _find_best_split(self, feature_values):
 
-    def _get_best_node(self, sample, targets):
-        nrof_columns = sample.shape[1]
-
-        best_metric_value = self._best_split_initialization
-        best_col_for_split = None
-        col_best_split_value = None
-
-        for col_idx in range(nrof_columns):
-            col_split_value, col_metric_value = self._find_best_split(sample[:, col_idx], targets)
-
-            if self.comparison_function(best_metric_value, col_metric_value):
-                col_best_split_value = col_split_value
-                best_metric_value = col_metric_value
-                best_col_for_split = col_idx
-
-        return best_col_for_split, col_best_split_value, best_metric_value
-
-    def _find_best_split(self, feature_values, target_values):
-        assert len(feature_values) == len(target_values)
-
-        mapping = self._sorted_mapping(feature_values, target_values)
         best_metric_value = self._best_split_initialization
         best_split_value = None
 
-        for f_value, _ in mapping:
-            left_sample, right_sample = self._split(mapping, f_value)
-            parent_freqs = m.get_fractions(mapping[:, 1])
-            left_freqs = m.get_fractions(left_sample[:, 1])
-            right_freqs = m.get_fractions(right_sample[:, 1])
+        for f_value in feature_values:
+
+            left_sample_index, right_sample_index = self._split(feature_values, f_value)
+
+            parent_freqs = m.get_fractions(feature_values)
+            left_freqs = m.get_fractions(feature_values[left_sample_index])
+            right_freqs = m.get_fractions(feature_values[right_sample_index])
 
             cur_metric_value = self.metric_function(parent_freqs, left_freqs, right_freqs)
+
             if self.comparison_function(best_metric_value, cur_metric_value):
                 best_metric_value = cur_metric_value
                 best_split_value = f_value
 
         return best_split_value, best_metric_value
 
+    def _get_best_node(self, sample, indexes):
+        nrof_columns = sample.shape[1]
 
+        best_metric_value = self._best_split_initialization
+        best_col_for_split = None
+        best_split_value = None
+
+        for col_idx in range(nrof_columns):
+            col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx])
+
+            if self.comparison_function(best_metric_value, col_metric_value):
+                best_split_value = col_split_value
+                best_metric_value = col_metric_value
+                best_col_for_split = col_idx
+
+        left_index, right_index = self._split(sample[indexes, best_col_for_split], best_split_value)
+        left_index = indexes[left_index]
+        right_index = indexes[right_index]
+
+        return left_index, right_index, best_col_for_split, best_split_value, best_metric_value
 
     def build_tree(self, sample, targets):
         stack = []
-        root = Node(sample=sample, targets=targets, depth=1)
+        sample_indexes = np.array(range(sample.shape[0]))
+        root = Node(sample_indexes=sample_indexes, targets=targets, depth=1)
         stack.append(root)
 
         while stack:
             current_node = stack.pop()
-            split_params = self._get_best_node(current_node.sample, current_node.targets)
-            best_col, split_value, best_metric = split_params
+            split_params = self._get_best_node(sample, current_node.sample_indexes)
+            left_index, right_index, best_col, split_value, best_metric = split_params
+
             current_node.split_column = best_col
             current_node.split_value = split_value
             current_node.metric_value = best_metric
-            if current_node.sample.shape[0] < self.min_split_sample:
+            if len(current_node.sample_indexes) < self.min_split_sample:
                 continue
 
-            left_sample, left_targets, right_sample, right_targets = self._split_matrix(current_node.sample,
-                                                                                        current_node.targets,
-                                                                                        best_col,
-                                                                                        split_value)
+            current_node.left = Node(sample_indexes=left_index,
+                                     targets=targets[left_index],
+                                     depth=current_node.depth + 1)
 
-            current_node.left = Node(sample=left_sample, targets=left_targets, depth=current_node.depth + 1)
-            current_node.right = Node(sample=right_sample, targets=right_targets, depth=current_node.depth + 1)
+            current_node.right = Node(sample_indexes=right_index,
+                                      targets=targets[right_index],
+                                      depth=current_node.depth + 1)
 
             if current_node.depth < self.max_depth:
                 stack.append(current_node.left)
