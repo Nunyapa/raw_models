@@ -9,14 +9,12 @@ import metrics as m
 # TODO : optimize sample splitting.
 
 
-
 T = TypeVar('T', int, float, str)
 
 List = TypeVar('List', list, np.array)
 
 BIG_CONST = 9999999
 SMALL_CONST = -9999999
-
 
 METRICS = {
     'ig': m.information_gain,
@@ -39,9 +37,7 @@ class Node:
     def __init__(self,
                  sample_indexes=None,
                  targets=None,
-                 depth=None
-                 ):
-
+                 depth=None):
         self.sample_indexes = sample_indexes
         self.targets = targets
         self.depth = depth
@@ -52,15 +48,19 @@ class Node:
         self.split_value = None
         self.metric_value = None
 
+    def is_leaf(self):
+        return True if self.left is None and self.right is None else False
+
 
 class DecisionTree:
 
     def __init__(self,
-                max_depth=None,
-                max_leaves=None,
-                min_sample_size_in_leaf=None,
-                min_split_sample=None,
-                split_metric='ig'):
+                 max_depth=None,
+                 max_leaves=None,
+                 min_sample_size_in_leaf=None,
+                 min_split_sample=None,
+                 split_metric='ig'):
+
         self.max_depth = max_depth
         self.max_leaves = max_leaves
         self.min_sample_size_in_leaf = min_sample_size_in_leaf
@@ -69,19 +69,9 @@ class DecisionTree:
         self.metric_function = METRICS[self.split_metric]
         self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
         self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
-        self._splits = {}
-        self._split_results = {}
         self._best_split_initialization = SMALL_CONST if self.metric_method_optimization == 'max' else BIG_CONST
         self.tree = None
 
-    @staticmethod
-    def _sorted_mapping(feature_values, target_values):
-        nrows = feature_values.shape[0]
-        mapping = np.zeros(shape=(nrows, 2))
-        mapping[:, 0] = feature_values
-        mapping[:, 1] = target_values
-        mapping = mapping[mapping[:, 0].argsort()]
-        return mapping
 
     @staticmethod
     def _split(feature_values, split_value):
@@ -97,6 +87,11 @@ class DecisionTree:
         for f_value in feature_values:
 
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
+
+            if len(left_sample_index) < self.min_sample_size_in_leaf:
+                continue
+            elif len(right_sample_index) < self.min_sample_size_in_leaf:
+                continue
 
             parent_freqs = m.get_fractions(feature_values)
             left_freqs = m.get_fractions(feature_values[left_sample_index])
@@ -131,6 +126,34 @@ class DecisionTree:
 
         return left_index, right_index, best_col_for_split, best_split_value, best_metric_value
 
+    def check_sample_suit(self, depth, sample_indexes):
+        is_sample_suitable = 1
+        sample_size = len(sample_indexes)
+
+        if depth >= self.max_depth:
+            is_sample_suitable = 0
+        elif sample_size <= self.min_split_sample:
+            is_sample_suitable = 0
+
+        return is_sample_suitable
+
+    def display_tree(self):
+        stack = [self.tree]
+        thresholds = []
+        cols = []
+        values = []
+
+        while stack:
+            current_node = stack.pop()
+            thresholds.append(current_node.split_value)
+            cols.append(current_node.split_column)
+            values.append(np.mean(current_node.targets))
+            if not current_node.is_leaf():
+                stack.append(current_node.left)
+                stack.append(current_node.right)
+
+        return cols, thresholds, values
+
     def build_tree(self, sample, targets):
         stack = []
         sample_indexes = np.array(range(sample.shape[0]))
@@ -145,19 +168,21 @@ class DecisionTree:
             current_node.split_column = best_col
             current_node.split_value = split_value
             current_node.metric_value = best_metric
-            if len(current_node.sample_indexes) < self.min_split_sample:
-                continue
+
+            next_depth = current_node.depth + 1
 
             current_node.left = Node(sample_indexes=left_index,
                                      targets=targets[left_index],
-                                     depth=current_node.depth + 1)
+                                     depth=next_depth)
 
             current_node.right = Node(sample_indexes=right_index,
                                       targets=targets[right_index],
-                                      depth=current_node.depth + 1)
+                                      depth=next_depth)
 
-            if current_node.depth < self.max_depth:
+            if self.check_sample_suit(next_depth, current_node.left.sample_indexes):
                 stack.append(current_node.left)
+
+            if self.check_sample_suit(next_depth, current_node.right.sample_indexes):
                 stack.append(current_node.right)
 
         return root
