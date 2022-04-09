@@ -5,7 +5,6 @@ import metrics as m
 
 # TODO LIST
 # TODO : Prune tree
-# TODO : make regression metrics.
 # TODO : optimize sample splitting.
 
 
@@ -18,12 +17,18 @@ SMALL_CONST = -9999999
 
 METRICS = {
     'ig': m.information_gain,
-    'gini': m.gini_impurity
+    'gini': m.gini_impurity,
+    'mse': m.mse,
+    'mae': m.mae,
+    'rmse': m.rmse
 }
 
 METRICS_METHOD_OPTIMIZATION = {
     'ig': 'max',
-    'gini': 'min'
+    'gini': 'min',
+    'mse': 'min',
+    'mae': 'min',
+    'rmse': 'min'
 }
 
 COMPARISON_FUNCTIONS = {
@@ -71,7 +76,6 @@ class DecisionTree:
         self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
         self._best_split_initialization = SMALL_CONST if self.metric_method_optimization == 'max' else BIG_CONST
         self.tree = None
-
 
     @staticmethod
     def _split(feature_values, split_value):

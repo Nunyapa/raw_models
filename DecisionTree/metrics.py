@@ -32,3 +32,30 @@ def gini_impurity(parent_probs, left_probs, right_probs):
     gini = (left_sample_size / parent_size) * left_gini + (right_sample_size / parent_size) * right_gini
 
     return gini
+
+
+# def mape(targets):
+#     predict_value = np.mean(targets)
+#     errors = np.subtract(targets, predict_value)
+#     precentages = np.divide(np.abs(errors), targets) * 100
+#     return precentages / targets.shape[0]
+
+
+def mae(targets):
+    predict_value = np.mean(targets)
+    errors = np.subtract(targets, predict_value)
+    return np.sum(np.abs(errors)) / targets.shape[0]
+
+
+def mse(targets):
+    predict_value = np.mean(targets)
+    errors = np.subtract(targets, predict_value)
+    return np.sum(np.power(errors, 2)) / targets.shape[0]
+
+
+def rmse(targets):
+    return np.sqrt(mse(targets))
+
+
+
+
