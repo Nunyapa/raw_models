@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Iterable, Mapping, TypeVar, Tuple
+# from typing import Iterable, Mapping, TypeVar, Tuple
 
 
 def get_fractions(values):

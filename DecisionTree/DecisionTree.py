@@ -1,16 +1,17 @@
-from hashlib import new
+# from hashlib import new
 import numpy as np
-from typing import Iterable, Mapping, Tuple, TypeVar
+# from typing import Iterable, Mapping, Tuple, TypeVar
 import metrics as m
 
 # TODO LIST
+# TODO : DecisionTreeBase class, DecisionTreeClassifier class, DecisionTreeRegressor class
 # TODO : Prune tree
 # TODO : optimize sample splitting.
 
 
-T = TypeVar('T', int, float, str)
-
-List = TypeVar('List', list, np.array)
+# T = TypeVar('T', int, float, str)
+#
+# List = TypeVar('List', list, np.array)
 
 BIG_CONST = 9999999
 SMALL_CONST = -9999999
@@ -66,11 +67,12 @@ class DecisionTree:
                  min_split_sample=None,
                  split_metric='ig'):
 
-        self.max_depth = max_depth
-        self.max_leaves = max_leaves
         self.min_sample_size_in_leaf = min_sample_size_in_leaf
         self.min_split_sample = min_split_sample
         self.split_metric = split_metric
+        self.max_leaves = max_leaves
+        self.max_depth = max_depth
+
         self.metric_function = METRICS[self.split_metric]
         self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
         self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
@@ -78,16 +80,30 @@ class DecisionTree:
         self.tree = None
 
     @staticmethod
+    def _sort_matrix(matrix, sort_by_col=0):
+        sorted_matrix = matrix[matrix[:, sort_by_col].argsort()]
+        return sorted_matrix
+
+    @staticmethod
     def _split(feature_values, split_value):
         left_sample_index = np.where(feature_values <= split_value)[0]
         right_sample_index = np.where(feature_values > split_value)[0]
         return left_sample_index, right_sample_index
 
-    def _find_best_split(self, feature_values):
+
+    def _find_best_split(self, feature_values, targets):
+        # TODO : this is not correct implementation of the method we need to pass targets into m.fraction_method
+        # to do this we need to concatenate feature_values, targets and indexes then sort them by features values (sorting is needed to
+        # use more efficient method of splitting) than pass the sorted matrix into the "drop" method of choosing the best
+        # f_value. After that we are ready to split our Nx3 shape matrix into a split function
+
+        sorted_matrix = np.dstack([feature_values, targets])[0]
+        sorted_matrix = self._sort_matrix(sorted_matrix)
 
         best_metric_value = self._best_split_initialization
         best_split_value = None
 
+        # TODO : optimize choosing f_value
         for f_value in feature_values:
 
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
@@ -97,9 +113,9 @@ class DecisionTree:
             elif len(right_sample_index) < self.min_sample_size_in_leaf:
                 continue
 
-            parent_freqs = m.get_fractions(feature_values)
-            left_freqs = m.get_fractions(feature_values[left_sample_index])
-            right_freqs = m.get_fractions(feature_values[right_sample_index])
+            parent_freqs = m.get_fractions(sorted_matrix[1])
+            left_freqs = m.get_fractions(sorted_matrix[left_sample_index, 1])
+            right_freqs = m.get_fractions(sorted_matrix[right_sample_index, 1])
 
             cur_metric_value = self.metric_function(parent_freqs, left_freqs, right_freqs)
 
@@ -109,7 +125,7 @@ class DecisionTree:
 
         return best_split_value, best_metric_value
 
-    def _get_best_node(self, sample, indexes):
+    def _get_best_node(self, sample, targets, indexes):
         nrof_columns = sample.shape[1]
 
         best_metric_value = self._best_split_initialization
@@ -117,7 +133,7 @@ class DecisionTree:
         best_split_value = None
 
         for col_idx in range(nrof_columns):
-            col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx])
+            col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx], targets[indexes])
 
             if self.comparison_function(best_metric_value, col_metric_value):
                 best_split_value = col_split_value
@@ -166,7 +182,7 @@ class DecisionTree:
 
         while stack:
             current_node = stack.pop()
-            split_params = self._get_best_node(sample, current_node.sample_indexes)
+            split_params = self._get_best_node(sample, targets, current_node.sample_indexes)
             left_index, right_index, best_col, split_value, best_metric = split_params
 
             current_node.split_column = best_col
