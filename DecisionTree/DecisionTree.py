@@ -1,10 +1,11 @@
 # from hashlib import new
 import numpy as np
 # from typing import Iterable, Mapping, Tuple, TypeVar
-import metrics as m
+# import metrics as m
+from .metrics import *
 
 # TODO LIST
-# TODO : DecisionTreeBase class, DecisionTreeClassifier class, DecisionTreeRegressor class
+# TODO : Initialization method for uninitialized DT parameters
 # TODO : Prune tree
 # TODO : optimize sample splitting.
 
@@ -17,11 +18,11 @@ BIG_CONST = 9999999
 SMALL_CONST = -9999999
 
 METRICS = {
-    'ig': m.information_gain,
-    'gini': m.gini_impurity,
-    'mse': m.mse,
-    'mae': m.mae,
-    'rmse': m.rmse
+    'ig': information_gain,
+    'gini': gini_impurity,
+    'mse': mse,
+    'mae': mae,
+    'rmse': rmse
 }
 
 METRICS_METHOD_OPTIMIZATION = {
@@ -57,6 +58,11 @@ class Node:
     def is_leaf(self):
         return True if self.left is None and self.right is None else False
 
+    def predict(self, data, indexes):
+        if self.is_leaf():
+            result = np.array([np.mean(self.targets) for _ in range(len(indexes))])
+            return result
+
 
 class DecisionTree:
 
@@ -65,6 +71,7 @@ class DecisionTree:
                  max_leaves=None,
                  min_sample_size_in_leaf=None,
                  min_split_sample=None,
+                 # classes=2,
                  split_metric='ig'):
 
         self.min_sample_size_in_leaf = min_sample_size_in_leaf
@@ -72,6 +79,7 @@ class DecisionTree:
         self.split_metric = split_metric
         self.max_leaves = max_leaves
         self.max_depth = max_depth
+        self.classes = None
 
         self.metric_function = METRICS[self.split_metric]
         self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
@@ -86,26 +94,31 @@ class DecisionTree:
 
     @staticmethod
     def _split(feature_values, split_value):
+        # print(feature_values, split_value)
         left_sample_index = np.where(feature_values <= split_value)[0]
         right_sample_index = np.where(feature_values > split_value)[0]
         return left_sample_index, right_sample_index
 
+    @staticmethod
+    def _get_f_values(input_vector):
+        '''
+        takes an input vector of numbers and if amount of unique values are more than 10
+        returns 0.1, 0.2...1 quantile of the vector
+        '''
+        split_values = np.histogram(input_vector, bins=10)[1]
+        return split_values
+
 
     def _find_best_split(self, feature_values, targets):
-        # TODO : this is not correct implementation of the method we need to pass targets into m.fraction_method
-        # to do this we need to concatenate feature_values, targets and indexes then sort them by features values (sorting is needed to
-        # use more efficient method of splitting) than pass the sorted matrix into the "drop" method of choosing the best
-        # f_value. After that we are ready to split our Nx3 shape matrix into a split function
-
         sorted_matrix = np.dstack([feature_values, targets])[0]
         sorted_matrix = self._sort_matrix(sorted_matrix)
 
         best_metric_value = self._best_split_initialization
         best_split_value = None
 
+        split_values = self._get_f_values(feature_values)
         # TODO : optimize choosing f_value
-        for f_value in feature_values:
-
+        for f_value in split_values:
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
 
             if len(left_sample_index) < self.min_sample_size_in_leaf:
@@ -113,9 +126,9 @@ class DecisionTree:
             elif len(right_sample_index) < self.min_sample_size_in_leaf:
                 continue
 
-            parent_freqs = m.get_fractions(sorted_matrix[1])
-            left_freqs = m.get_fractions(sorted_matrix[left_sample_index, 1])
-            right_freqs = m.get_fractions(sorted_matrix[right_sample_index, 1])
+            parent_freqs = get_freqs(sorted_matrix[1], self.classes)
+            left_freqs = get_freqs(sorted_matrix[left_sample_index, 1], self.classes)
+            right_freqs = get_freqs(sorted_matrix[right_sample_index, 1], self.classes)
 
             cur_metric_value = self.metric_function(parent_freqs, left_freqs, right_freqs)
 
@@ -211,4 +224,36 @@ class DecisionTree:
         pass
 
     def fit(self, X_train, y_train):
+        # assert self.classes == len(np.unique(y_train))
+        self.classes = np.unique(y_train)
         self.tree = self.build_tree(X_train, y_train)
+
+    def _node_predict(self, node, sample, indexes):
+        if node.is_leaf():
+            probs = get_freqs(node.targets, self.classes)
+            result = np.array([probs for _ in range(sample.shape[0])])
+            return result, indexes
+
+        left_sample_indexes, right_sample_indexes = self._split(sample[:, node.split_column], node.split_value)
+
+        left_result, left_sample_indexes = self._node_predict(node.left, sample[left_sample_indexes], left_sample_indexes)
+        right_result, right_sample_indexes = self._node_predict(node.right, sample[right_sample_indexes], right_sample_indexes)
+
+        left_sample_indexes = indexes[left_sample_indexes]
+        right_sample_indexes = indexes[right_sample_indexes]
+
+        # print('LR', left_result, right_result)
+        parent_result = np.concatenate([left_result, right_result])
+        parent_indexes = np.concatenate([left_sample_indexes, right_sample_indexes])
+
+        return parent_result, parent_indexes
+
+    def predict(self, data):
+        indexes = np.array([_ for _ in range(data.shape[0])])
+        results, parent_indexes = self._node_predict(self.tree, data, indexes)
+        # print(len(results), len(parent_indexes))
+        sorted_results = np.column_stack([parent_indexes, results])
+        sorted_results = self._sort_matrix(sorted_results, sort_by_col=0)
+        return sorted_results[:, 1:]
+
+

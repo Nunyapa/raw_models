@@ -2,8 +2,11 @@ import numpy as np
 # from typing import Iterable, Mapping, TypeVar, Tuple
 
 
-def get_fractions(values):
-    _, freqs = np.unique(values, return_counts=True)
+def get_freqs(values, classes):
+    uniqs, freqs = np.unique(values, return_counts=True)
+    for c in range(len(classes)):
+        if classes[c] not in uniqs:
+            freqs = np.insert(freqs, c, 0)
     total_amount = np.sum(freqs)
     freqs = freqs / total_amount
     return freqs

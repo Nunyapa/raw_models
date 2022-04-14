@@ -9,8 +9,9 @@ tree = DecisionTree(max_depth=5,
                 max_leaves=32,
                 min_sample_size_in_leaf=3,
                 min_split_sample=6,
+
                 split_metric='ig')
 
 tree.fit(sample, targets)
-
 print(tree.display_tree())
+
