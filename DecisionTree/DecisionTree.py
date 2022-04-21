@@ -6,8 +6,10 @@ from .metrics import *
 
 # TODO LIST
 # TODO : Initialization method for uninitialized DT parameters
-# TODO : Prune tree
-# TODO : optimize sample splitting.
+# TODO : post-pruning with a threshold for a metric gain
+# TODO : max leaves stop splitting
+# TODO : write desiciontrees for classification, regression.
+
 
 
 # T = TypeVar('T', int, float, str)
@@ -58,20 +60,17 @@ class Node:
     def is_leaf(self):
         return True if self.left is None and self.right is None else False
 
-    def predict(self, data, indexes):
-        if self.is_leaf():
-            result = np.array([np.mean(self.targets) for _ in range(len(indexes))])
-            return result
-
 
 class DecisionTree:
 
+    UNEXIST_CODE = -2
+
     def __init__(self,
-                 max_depth=None,
-                 max_leaves=None,
-                 min_sample_size_in_leaf=None,
-                 min_split_sample=None,
-                 # classes=2,
+                 max_depth=10,
+                 max_leaves=1024,
+                 min_sample_size_in_leaf=1,
+                 min_split_sample=2,
+
                  split_metric='ig'):
 
         self.min_sample_size_in_leaf = min_sample_size_in_leaf
@@ -108,7 +107,6 @@ class DecisionTree:
         split_values = np.histogram(input_vector, bins=10)[1]
         return split_values
 
-
     def _find_best_split(self, feature_values, targets):
         sorted_matrix = np.dstack([feature_values, targets])[0]
         sorted_matrix = self._sort_matrix(sorted_matrix)
@@ -117,7 +115,6 @@ class DecisionTree:
         best_split_value = None
 
         split_values = self._get_f_values(feature_values)
-        # TODO : optimize choosing f_value
         for f_value in split_values:
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
 
@@ -170,20 +167,27 @@ class DecisionTree:
 
         return is_sample_suitable
 
+    @staticmethod
+    def _get_tree_stack(in_node):
+        stack = [in_node]
+        for node in stack:
+            stack.append(node.left)
+            stack.append(node.right)
+        return stack
+
     def display_tree(self):
-        stack = [self.tree]
+        stack = self._get_tree_stack(self.tree)
         thresholds = []
         cols = []
         values = []
 
-        while stack:
-            current_node = stack.pop()
+        for current_node in stack:
             thresholds.append(current_node.split_value)
             cols.append(current_node.split_column)
             values.append(np.mean(current_node.targets))
             if not current_node.is_leaf():
-                stack.append(current_node.left)
                 stack.append(current_node.right)
+                stack.append(current_node.left)
 
         return cols, thresholds, values
 
@@ -212,16 +216,42 @@ class DecisionTree:
                                       targets=targets[right_index],
                                       depth=next_depth)
 
-            if self.check_sample_suit(next_depth, current_node.left.sample_indexes):
-                stack.append(current_node.left)
-
             if self.check_sample_suit(next_depth, current_node.right.sample_indexes):
                 stack.append(current_node.right)
 
+            if self.check_sample_suit(next_depth, current_node.left.sample_indexes):
+                stack.append(current_node.left)
         return root
 
     def prune_tree(self):
-        pass
+        stack = self._get_tree_stack(self.tree)
+        leaves_idxs = []
+        for idx, current_node in enumerate(stack):
+            if current_node.is_leaf():
+                leaves_idxs.append(idx)
+
+        leaves_to_prune = []
+
+        while len(leaves_idxs) > self.max_leaves:
+            worst_leaf_idx = self._get_worst_leaf(stack, leaves_idxs)
+            leaves_to_prune.append(worst_leaf_idx)
+            leaves_idxs.remove(worst_leaf_idx)
+
+        # TODO : To delete a leaf it is not enough to remove it from stack
+        # it requires to set to the leaf parent`s left or right attribute None value
+        # TODO : split current prune_tree method into 2. 1st is method to get leaves stack,
+        # 2nd is to iterate through the leaves parents nodes and set None value to a required node.
+        # Thoughts. How to deal with leaf pruning in the situation when a parent node has 2 leaves and one
+        # of them has the worst score and another one has the best score for the all current leaves.
+
+    def _get_worst_leaf(self, stack, leaves_idxs):
+        worst_leaf_metric = BIG_CONST if self.metric_method_optimization == 'max' else SMALL_CONST
+        worst_leaf_idx = SMALL_CONST
+        for current_leaf_idx in leaves_idxs:
+            if worst_leaf_metric > stack[current_leaf_idx].metric_value:
+                worst_leaf_metric = stack[current_leaf_idx].metric_value
+                worst_leaf_idx = current_leaf_idx
+        return worst_leaf_idx
 
     def fit(self, X_train, y_train):
         # assert self.classes == len(np.unique(y_train))
@@ -236,8 +266,13 @@ class DecisionTree:
 
         left_sample_indexes, right_sample_indexes = self._split(sample[:, node.split_column], node.split_value)
 
-        left_result, left_sample_indexes = self._node_predict(node.left, sample[left_sample_indexes], left_sample_indexes)
-        right_result, right_sample_indexes = self._node_predict(node.right, sample[right_sample_indexes], right_sample_indexes)
+        left_result, left_sample_indexes = self._node_predict(node.left,
+                                                              sample[left_sample_indexes],
+                                                              left_sample_indexes)
+
+        right_result, right_sample_indexes = self._node_predict(node.right,
+                                                                sample[right_sample_indexes],
+                                                                right_sample_indexes)
 
         left_sample_indexes = indexes[left_sample_indexes]
         right_sample_indexes = indexes[right_sample_indexes]
