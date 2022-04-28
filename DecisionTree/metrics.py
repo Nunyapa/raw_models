@@ -44,20 +44,29 @@ def gini_impurity(parent_probs, left_probs, right_probs):
 #     return precentages / targets.shape[0]
 
 
-def mae(targets):
-    predict_value = np.mean(targets)
-    errors = np.subtract(targets, predict_value)
-    return np.sum(np.abs(errors)) / targets.shape[0]
+# def error_reduction(metric_func, parent_probs, left_probs, right_probs):
+#     parent_metric = metric_func(parent_predict_value, sorted_matrix[:, 1])
+#     left_metric = metric_func(left_predict_value, sorted_matrix[left_sample_index, 1])
+#     right_metric = metric_func(right_predict_value,sorted_matrix[right_sample_index, 1])
+#
+#     return np.sum(np.abs(errors)) / y_true.shape[0]
+
+def mae(y_true, y_pred):
+    assert y_pred.shape[0] == 1 or y_pred.shape[0] == y_true.shape[0]
+    # predict_value = np.mean(targets)
+    errors = np.subtract(y_true, y_pred)
+    return np.sum(np.abs(errors)) / y_true.shape[0]
 
 
-def mse(targets):
-    predict_value = np.mean(targets)
-    errors = np.subtract(targets, predict_value)
-    return np.sum(np.power(errors, 2)) / targets.shape[0]
+def mse(y_true, y_pred):
+    assert y_pred.shape[0] == 1 or y_pred.shape[0] == y_true.shape[0]
+    # predict_value = np.mean(targets)
+    errors = np.subtract(y_true, y_pred)
+    return np.sum(np.power(errors, 2)) / y_true.shape[0]
 
 
-def rmse(targets):
-    return np.sqrt(mse(targets))
+def rmse(y_true, y_pred):
+    return np.sqrt(mse(y_true, y_pred))
 
 
 
