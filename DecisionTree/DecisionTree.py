@@ -2,13 +2,12 @@
 import numpy as np
 # from typing import Iterable, Mapping, Tuple, TypeVar
 # import metrics as m
-from metrics import *
+from .metrics import *
 
 # TODO LIST
 # TODO : Initialization method for uninitialized DT parameters
-# TODO : post-pruning with a threshold for a metric gain
-# TODO : max leaves stop splitting
-# TODO : write desiciontrees for classification, regression.
+# TODO : Stop splitting if there are already max possible metric score
+# TODO : Something wrong with multiclass prediction. Doesnt fit right
 
 
 
@@ -126,6 +125,8 @@ class DecisionTree:
             split_values = np.histogram(input_vector, bins=10)[1]
         elif self.split_type == 'all':
             split_values = input_vector
+        else:
+            raise ValueError(f'Wrong split type: {self.split_type}. Try "q" or "all"')
         return split_values
 
     def _find_best_split(self, feature_values, targets):
@@ -178,7 +179,7 @@ class DecisionTree:
             is_sample_suitable = False
         elif sample_size <= self.min_split_sample:
             is_sample_suitable = False
-        elif (self.max_leaves - leaves_counter) <= MINIMAL_RESIDUAL_LEAVES:
+        elif (self.max_leaves - leaves_counter) == 0:
             is_sample_suitable = False
 
         return is_sample_suitable
@@ -189,7 +190,7 @@ class DecisionTree:
 
         self.tree_stack_.append(root)
 
-        leaves_counter = 0
+        leaves_counter = 1
 
         for current_node in self.tree_stack_:
             split_params = self._get_best_node(sample,
@@ -215,15 +216,14 @@ class DecisionTree:
                                       depth=next_depth,
                                       node_number=parent_node_number + 2)
 
+            leaves_counter += 2 - 1
+
             if self.check_sample_suit(next_depth, left_index, leaves_counter):
                 self.tree_stack_.append(current_node.left)
-            else:
-                leaves_counter += 1
 
             if self.check_sample_suit(next_depth, right_index, leaves_counter):
                 self.tree_stack_.append(current_node.right)
-            else:
-                leaves_counter += 1
+
 
         return root
 
@@ -238,10 +238,8 @@ class DecisionTree:
         pass
 
 class DecisionTreeClassifier(DecisionTree):
-    def __init__(self, *args, **kwargs):
-        super(DecisionTreeClassifier, self).__init__(*args, **kwargs)
-
-
+    # def __init__(self, *args, **kwargs):
+    #     super(DecisionTreeClassifier, self).__init__(*args, **kwargs)
 
     def _find_best_split(self, feature_values, targets):
         sorted_matrix = np.dstack([feature_values, targets])[0]
@@ -312,8 +310,8 @@ class DecisionTreeClassifier(DecisionTree):
 
 
 class DecisionTreeRegressor(DecisionTree):
-    def __init__(self, *args, **kwargs):
-        super(DecisionTreeRegressor, self).__init__(*args, **kwargs)
+    # def __init__(self, *args, **kwargs):
+    #     super(DecisionTreeRegressor, self).__init__(*args, **kwargs)
 
     def _find_best_split(self, feature_values, targets):
         sorted_matrix = np.dstack([feature_values, targets])[0]
