@@ -37,6 +37,7 @@ METRICS_METHOD_OPTIMIZATION = {
     'rmse': 'min'
 }
 
+
 COMPARISON_FUNCTIONS = {
     'max': lambda old, new: old < new,
     'min': lambda old, new: old > new
@@ -116,46 +117,7 @@ class DecisionTree:
                 stack.append(node.right)
         return stack
 
-    def _get_f_values(self, input_vector):
-        '''
-        takes an input vector of numbers and if amount of unique values are more than 10
-        returns 0.1, 0.2...1 quantile of the vector
-        '''
-        if self.split_type == 'q':
-            split_values = np.histogram(input_vector, bins=10)[1]
-        elif self.split_type == 'all':
-            split_values = input_vector
-        else:
-            raise ValueError(f'Wrong split type: {self.split_type}. Try "q" or "all"')
-        return split_values
-
-    def _find_best_split(self, feature_values, targets):
-        pass
-
-
-    def _get_best_node(self, sample, targets, indexes):
-        nrof_columns = sample.shape[1]
-
-        # initialize best_metric_value with the pervios node best metric value
-        best_metric_value = self._best_split_initialization
-        best_col_for_split = None
-        best_split_value = None
-
-        for col_idx in range(nrof_columns):
-            col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx], targets[indexes])
-
-            if self.comparison_function(best_metric_value, col_metric_value):
-                best_split_value = col_split_value
-                best_metric_value = col_metric_value
-                best_col_for_split = col_idx
-
-        left_index, right_index = self._split(sample[indexes, best_col_for_split], best_split_value)
-        left_index = indexes[left_index]
-        right_index = indexes[right_index]
-
-        return left_index, right_index, best_col_for_split, best_split_value, best_metric_value
-
-    def display_tree(self):
+    def print_tree(self):
         stack = self._get_tree_stack(self.tree_)
         thresholds = []
         cols = []
@@ -169,9 +131,41 @@ class DecisionTree:
 
         return cols, thresholds, values
 
-    def check_sample_suit(self, depth, sample_indexes, leaves_counter):
-        MINIMAL_RESIDUAL_LEAVES = 2
+    def _get_f_values(self, input_vector):
+        '''
+        takes an input vector of numbers and if amount of unique values are more than 10
+        returns 0.1, 0.2...1 quantile of the vector
+        '''
+        if self.split_type == 'q':
+            split_values = np.histogram(input_vector, bins=10)[1]
+        elif self.split_type == 'all':
+            split_values = input_vector
+        else:
+            raise ValueError(f'Wrong split type: {self.split_type}. Try "q" or "all"')
+        return split_values
 
+
+    def _get_best_node(self, sample, targets, indexes):
+        best_metric_value = self._best_split_initialization
+        best_col_for_split = None
+        best_split_value = None
+
+        for col_idx in range(sample.shape[1]):
+            col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx], targets[indexes])
+
+            if self.comparison_function(best_metric_value, col_metric_value):
+                best_split_value = col_split_value
+                best_metric_value = col_metric_value
+                best_col_for_split = col_idx
+
+        left_index, right_index = self._split(sample[indexes, best_col_for_split], best_split_value)
+        left_index = indexes[left_index]
+        right_index = indexes[right_index]
+
+        return left_index, right_index, best_col_for_split, best_split_value, best_metric_value
+
+
+    def check_sample_suit(self, depth, sample_indexes, leaves_counter):
         is_sample_suitable = True
         sample_size = len(sample_indexes)
 
@@ -186,7 +180,7 @@ class DecisionTree:
 
     def build_tree(self, sample, targets):
         sample_indexes = np.array(range(sample.shape[0]))
-        root = Node(sample_indexes=sample_indexes, targets=targets, depth=1, node_number=0)
+        root = Node(sample_indexes=sample_indexes, targets=targets, depth=0, node_number=0)
 
         self.tree_stack_.append(root)
 
@@ -227,6 +221,9 @@ class DecisionTree:
 
         return root
 
+    def _find_best_split(self, feature_values, targets):
+        pass
+
     def fit(self, X_train, y_train):
         pass
 
@@ -238,8 +235,6 @@ class DecisionTree:
         pass
 
 class DecisionTreeClassifier(DecisionTree):
-    # def __init__(self, *args, **kwargs):
-    #     super(DecisionTreeClassifier, self).__init__(*args, **kwargs)
 
     def _find_best_split(self, feature_values, targets):
         sorted_matrix = np.dstack([feature_values, targets])[0]
@@ -310,8 +305,6 @@ class DecisionTreeClassifier(DecisionTree):
 
 
 class DecisionTreeRegressor(DecisionTree):
-    # def __init__(self, *args, **kwargs):
-    #     super(DecisionTreeRegressor, self).__init__(*args, **kwargs)
 
     def _find_best_split(self, feature_values, targets):
         sorted_matrix = np.dstack([feature_values, targets])[0]

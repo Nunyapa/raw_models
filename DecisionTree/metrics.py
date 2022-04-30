@@ -13,7 +13,7 @@ def get_freqs(values, classes):
 
 
 def entropy(probabilities):
-    result = [p * np.log(p) for p in probabilities if p != 0]
+    result = [p * np.log2(p) for p in probabilities if p != 0]
     result = -1 * np.sum(result)
     return result
 
