@@ -28,8 +28,8 @@ tree = DecisionTreeClassifier(max_depth=3,
 
 tree.fit(sample, targets)
 print(tree.display_tree())
-print(tree._get_tree_stack(tree.tree_))
-print(len(tree._get_tree_stack(tree.tree_)))
+print(tree._get_tree_stack(tree._tree))
+print(len(tree._get_tree_stack(tree._tree)))
 
 preds = tree.predict(sample)
 preds = np.argmax(preds, axis=1)

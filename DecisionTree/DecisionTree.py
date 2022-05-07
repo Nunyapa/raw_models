@@ -1,48 +1,31 @@
-# from hashlib import new
 import numpy as np
-# from typing import Iterable, Mapping, Tuple, TypeVar
-# import metrics as m
 from .metrics import *
-
-# TODO LIST
-# TODO : Initialization method for uninitialized DT parameters
-# TODO : Stop splitting if there are already max possible metric score
-# TODO : Something wrong with multiclass prediction. Doesnt fit right
-
-
-
-# T = TypeVar('T', int, float, str)
-#
-# List = TypeVar('List', list, np.array)
 
 BIG_CONST = 9999999
 SMALL_CONST = -9999999
 LEAF_FLAG = -1
 UNKNOWN_FLAG = None
 
-
 METRICS = {
-    'ig': information_gain,
-    'gini': gini_impurity,
-    'mse': mse,
-    'mae': mae,
-    'rmse': rmse
+    'ig': InformationGainCriterion,
+    'gini': GiniCriterion,
+    'mse': MseCriterion,
+    'mae': MaeCriterion,
+    'rmse': RmseCriterion
 }
 
-METRICS_METHOD_OPTIMIZATION = {
-    'ig': 'max',
-    'gini': 'min',
-    'mse': 'min',
-    'mae': 'min',
-    'rmse': 'min'
-}
+# METRICS_METHOD_OPTIMIZATION = {
+#     'ig': 'max',
+#     'gini': 'min',
+#     'mse': 'min',
+#     'mae': 'min',
+#     'rmse': 'min'
+# }
 
-
-COMPARISON_FUNCTIONS = {
-    'max': lambda old, new: old < new,
-    'min': lambda old, new: old > new
-}
-
+# COMPARISON_FUNCTIONS = {
+#     'max': lambda old, new: old < new,
+#     'min': lambda old, new: old > new
+# }
 
 class Node:
 
@@ -68,10 +51,10 @@ class Node:
 
 class DecisionTree:
     def __init__(self,
-                 max_depth=10,
-                 max_leaves=1024,
-                 min_sample_size_in_leaf=1,
-                 min_split_sample=2,
+                 max_depth=None,
+                 max_leaves=None,
+                 min_sample_size_in_leaf=None,
+                 min_split_sample=None,
 
                  split_metric='ig',
                  split_type='q'):
@@ -84,12 +67,29 @@ class DecisionTree:
         self.classes = None
         self.split_type = split_type
 
-        self.metric_function = METRICS[self.split_metric]
-        self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
-        self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
-        self._best_split_initialization = SMALL_CONST if self.metric_method_optimization == 'max' else BIG_CONST
-        self.tree_ = None
-        self.tree_stack_ = []
+        self.criterion = METRICS[self.split_metric]()
+
+        self._parameters_initialization()
+
+
+        # self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
+        # self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
+        self._best_split_initialization = SMALL_CONST if self.criterion.optimization_way == 'max' else BIG_CONST
+        self._tree = None
+        self._treestack = []
+
+    def _parameters_initialization(self):
+        if self.max_depth is None:
+            self.max_depth = 10
+
+        if self.max_leaves is None:
+            self.max_leaves = 2 ** self.max_depth
+
+        if self.min_split_sample is None:
+            self.min_sample_size_in_leaf = 1
+
+        if self.min_split_sample is None:
+            self.min_split_sample = 2 * self.min_sample_size_in_leaf
 
     @staticmethod
     def _sort_matrix(matrix, sort_by_col=0):
@@ -118,7 +118,7 @@ class DecisionTree:
         return stack
 
     def print_tree(self):
-        stack = self._get_tree_stack(self.tree_)
+        stack = self._get_tree_stack(self._tree)
         thresholds = []
         cols = []
         values = []
@@ -144,7 +144,6 @@ class DecisionTree:
             raise ValueError(f'Wrong split type: {self.split_type}. Try "q" or "all"')
         return split_values
 
-
     def _get_best_node(self, sample, targets, indexes):
         best_metric_value = self._best_split_initialization
         best_col_for_split = None
@@ -153,7 +152,7 @@ class DecisionTree:
         for col_idx in range(sample.shape[1]):
             col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx], targets[indexes])
 
-            if self.comparison_function(best_metric_value, col_metric_value):
+            if self.criterion.comparison_for_optimization(best_metric_value, col_metric_value):
                 best_split_value = col_split_value
                 best_metric_value = col_metric_value
                 best_col_for_split = col_idx
@@ -182,11 +181,12 @@ class DecisionTree:
         sample_indexes = np.array(range(sample.shape[0]))
         root = Node(sample_indexes=sample_indexes, targets=targets, depth=0, node_number=0)
 
-        self.tree_stack_.append(root)
+        self._treestack.append(root)
 
         leaves_counter = 1
 
-        for current_node in self.tree_stack_:
+        for current_node in self._treestack:
+
             split_params = self._get_best_node(sample,
                                                targets,
                                                current_node.sample_indexes)
@@ -213,11 +213,10 @@ class DecisionTree:
             leaves_counter += 2 - 1
 
             if self.check_sample_suit(next_depth, left_index, leaves_counter):
-                self.tree_stack_.append(current_node.left)
+                self._treestack.append(current_node.left)
 
             if self.check_sample_suit(next_depth, right_index, leaves_counter):
-                self.tree_stack_.append(current_node.right)
-
+                self._treestack.append(current_node.right)
 
         return root
 
@@ -253,13 +252,11 @@ class DecisionTreeClassifier(DecisionTree):
             elif len(right_sample_index) < self.min_sample_size_in_leaf:
                 continue
 
-            parent_freqs = get_freqs(sorted_matrix[:, 1], self.classes)
-            left_freqs = get_freqs(sorted_matrix[left_sample_index, 1], self.classes)
-            right_freqs = get_freqs(sorted_matrix[right_sample_index, 1], self.classes)
+            cur_metric_value = self.criterion.calculate(sorted_matrix[:, 1],
+                                                        sorted_matrix[left_sample_index, 1],
+                                                        sorted_matrix[right_sample_index, 1])
 
-            cur_metric_value = self.metric_function(parent_freqs, left_freqs, right_freqs)
-
-            if self.comparison_function(best_metric_value, cur_metric_value):
+            if self.criterion.comparison_for_optimization(best_metric_value, cur_metric_value):
                 best_metric_value = cur_metric_value
                 best_split_value = f_value
 
@@ -267,7 +264,8 @@ class DecisionTreeClassifier(DecisionTree):
 
     def fit(self, X_train, y_train):
         self.classes = np.unique(y_train)
-        self.tree_ = self.build_tree(X_train, y_train)
+        self.criterion.classes = self.classes
+        self._tree = self.build_tree(X_train, y_train)
 
     def _node_predict(self, node, sample, indexes):
         if node.is_leaf():
@@ -289,7 +287,6 @@ class DecisionTreeClassifier(DecisionTree):
         left_sample_indexes = indexes[left_sample_indexes]
         right_sample_indexes = indexes[right_sample_indexes]
 
-        # print('LR', left_result, right_result)
         parent_result = np.concatenate([left_result, right_result])
         parent_indexes = np.concatenate([left_sample_indexes, right_sample_indexes])
 
@@ -297,8 +294,7 @@ class DecisionTreeClassifier(DecisionTree):
 
     def predict(self, data):
         indexes = np.array(list(range(data.shape[0])))
-        results, parent_indexes = self._node_predict(self.tree_, data, indexes)
-        # print(len(results), len(parent_indexes))
+        results, parent_indexes = self._node_predict(self._tree, data, indexes)
         sorted_results = np.column_stack([parent_indexes, results])
         sorted_results = self._sort_matrix(sorted_results, sort_by_col=0)
         return sorted_results[:, 1:]
@@ -327,20 +323,23 @@ class DecisionTreeRegressor(DecisionTree):
             left_predict_value = np.array([sorted_matrix[left_sample_index, 1].mean()])
             right_predict_value = np.array([sorted_matrix[right_sample_index, 1].mean()])
 
-            parent_metric = self.metric_function(sorted_matrix[:, 1], parent_predict_value)
-            left_metric = self.metric_function(sorted_matrix[left_sample_index, 1], left_predict_value)
-            right_metric = self.metric_function(sorted_matrix[right_sample_index, 1], right_predict_value)
+            parent_metric = self.criterion.calculate(sorted_matrix[:, 1], parent_predict_value)
+            left_metric = self.criterion.calculate(sorted_matrix[left_sample_index, 1], left_predict_value)
+            right_metric = self.criterion.calculate(sorted_matrix[right_sample_index, 1], right_predict_value)
 
-            mean_l_r_metric = (left_metric + right_metric) / 2
+            left_metric = left_metric * len(left_sample_index) / len(feature_values)
+            right_metric = right_metric * len(left_sample_index) / len(feature_values)
 
-            if self.comparison_function(parent_metric, mean_l_r_metric) and self.comparison_function(best_metric_value, mean_l_r_metric):
+            mean_l_r_metric = left_metric + right_metric
+
+            if self.criterion.comparison_for_optimization(best_metric_value, mean_l_r_metric):
                 best_metric_value = mean_l_r_metric
                 best_split_value = f_value
 
         return best_split_value, best_metric_value
 
     def fit(self, X_train, y_train):
-        self.tree_ = self.build_tree(X_train, y_train)
+        self._tree = self.build_tree(X_train, y_train)
 
     def _node_predict(self, node, sample, indexes):
         if node.is_leaf():
@@ -369,7 +368,7 @@ class DecisionTreeRegressor(DecisionTree):
     def predict(self, data):
         indexes = np.array(list(range(data.shape[0])))
 
-        results, parent_indexes = self._node_predict(self.tree_, data, indexes)
+        results, parent_indexes = self._node_predict(self._tree, data, indexes)
         # print(len(results), len(parent_indexes))
         sorted_results = np.column_stack([parent_indexes, results])
         sorted_results = self._sort_matrix(sorted_results, sort_by_col=0)
