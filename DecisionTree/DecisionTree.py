@@ -33,7 +33,8 @@ class Node:
                  sample_indexes=None,
                  targets=None,
                  depth=None,
-                 node_number=None):
+                 node_number=None,
+                 parent=None):
         self.sample_indexes = sample_indexes
         self.targets = targets
         self.depth = depth
@@ -41,6 +42,8 @@ class Node:
 
         self.left = LEAF_FLAG
         self.right = LEAF_FLAG
+        self.parent = parent
+
         self.split_column = None
         self.split_value = None
         self.metric_value = None
@@ -129,7 +132,7 @@ class DecisionTree:
                 cols.append(current_node.split_column)
                 values.append(np.mean(current_node.targets))
 
-        return cols, thresholds, values
+        return stack, cols, thresholds, values
 
     def _get_f_values(self, input_vector):
         '''
@@ -138,18 +141,23 @@ class DecisionTree:
         '''
         if self.split_type == 'q':
             split_values = np.histogram(input_vector, bins=10)[1]
+        elif self.split_type == 'rand':
+            split_values = np.random.choice(input_vector, size=10)
         elif self.split_type == 'all':
             split_values = input_vector
         else:
-            raise ValueError(f'Wrong split type: {self.split_type}. Try "q" or "all"')
+            raise ValueError(f'Wrong split type: {self.split_type}. Try "q", "all" or "rand"')
         return split_values
 
-    def _get_best_node(self, sample, targets, indexes):
+    def _get_best_node(self, sample, targets, node):
         best_metric_value = self._best_split_initialization
         best_col_for_split = None
         best_split_value = None
 
-        for col_idx in range(sample.shape[1]):
+        indexes = node.sample_indexes
+        columns = sample.shape[1]
+
+        for col_idx in range(columns):
             col_split_value, col_metric_value = self._find_best_split(sample[indexes, col_idx], targets[indexes])
 
             if self.criterion.comparison_for_optimization(best_metric_value, col_metric_value):
@@ -179,7 +187,11 @@ class DecisionTree:
 
     def build_tree(self, sample, targets):
         sample_indexes = np.array(range(sample.shape[0]))
-        root = Node(sample_indexes=sample_indexes, targets=targets, depth=0, node_number=0)
+        root = Node(sample_indexes=sample_indexes,
+                    targets=targets,
+                    depth=0,
+                    node_number=0,
+                    parent=None)
 
         self._treestack.append(root)
 
@@ -189,7 +201,7 @@ class DecisionTree:
 
             split_params = self._get_best_node(sample,
                                                targets,
-                                               current_node.sample_indexes)
+                                               current_node)
 
             left_index, right_index, best_col, split_value, best_metric = split_params
 
@@ -203,12 +215,14 @@ class DecisionTree:
             current_node.left = Node(sample_indexes=left_index,
                                      targets=targets[left_index],
                                      depth=next_depth,
-                                     node_number=parent_node_number + 1)
+                                     node_number=parent_node_number + 1,
+                                     parent=current_node)
 
             current_node.right = Node(sample_indexes=right_index,
                                       targets=targets[right_index],
                                       depth=next_depth,
-                                      node_number=parent_node_number + 2)
+                                      node_number=parent_node_number + 2,
+                                      parent=current_node)
 
             leaves_counter += 2 - 1
 
@@ -247,9 +261,9 @@ class DecisionTreeClassifier(DecisionTree):
         for f_value in split_values:
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
 
-            if len(left_sample_index) < self.min_sample_size_in_leaf:
+            if len(left_sample_index) <= self.min_sample_size_in_leaf:
                 continue
-            elif len(right_sample_index) < self.min_sample_size_in_leaf:
+            elif len(right_sample_index) <= self.min_sample_size_in_leaf:
                 continue
 
             cur_metric_value = self.criterion.calculate(sorted_matrix[:, 1],
@@ -314,9 +328,9 @@ class DecisionTreeRegressor(DecisionTree):
         for f_value in split_values:
             left_sample_index, right_sample_index = self._split(feature_values, f_value)
 
-            if len(left_sample_index) < self.min_sample_size_in_leaf:
+            if len(left_sample_index) <= self.min_sample_size_in_leaf:
                 continue
-            elif len(right_sample_index) < self.min_sample_size_in_leaf:
+            elif len(right_sample_index) <= self.min_sample_size_in_leaf:
                 continue
 
             parent_predict_value = np.array([sorted_matrix[:, 1].mean()])
