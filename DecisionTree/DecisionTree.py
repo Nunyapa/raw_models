@@ -14,19 +14,6 @@ METRICS = {
     'rmse': RmseCriterion
 }
 
-# METRICS_METHOD_OPTIMIZATION = {
-#     'ig': 'max',
-#     'gini': 'min',
-#     'mse': 'min',
-#     'mae': 'min',
-#     'rmse': 'min'
-# }
-
-# COMPARISON_FUNCTIONS = {
-#     'max': lambda old, new: old < new,
-#     'min': lambda old, new: old > new
-# }
-
 class Node:
 
     def __init__(self,
@@ -74,9 +61,6 @@ class DecisionTree:
 
         self._parameters_initialization()
 
-
-        # self.metric_method_optimization = METRICS_METHOD_OPTIMIZATION[self.split_metric]
-        # self.comparison_function = COMPARISON_FUNCTIONS[self.metric_method_optimization]
         self._best_split_initialization = SMALL_CONST if self.criterion.optimization_way == 'max' else BIG_CONST
         self._tree = None
         self._treestack = []
@@ -171,7 +155,6 @@ class DecisionTree:
 
         return left_index, right_index, best_col_for_split, best_split_value, best_metric_value
 
-
     def check_sample_suit(self, depth, sample_indexes, leaves_counter):
         is_sample_suitable = True
         sample_size = len(sample_indexes)
@@ -243,9 +226,9 @@ class DecisionTree:
     def _node_predict(self, node, sample, indexes):
         pass
 
-
     def predict(self, data):
         pass
+
 
 class DecisionTreeClassifier(DecisionTree):
 
@@ -373,7 +356,6 @@ class DecisionTreeRegressor(DecisionTree):
         left_sample_indexes = indexes[left_sample_indexes]
         right_sample_indexes = indexes[right_sample_indexes]
 
-        # print('LR', left_result, right_result)
         parent_result = np.concatenate([left_result, right_result])
         parent_indexes = np.concatenate([left_sample_indexes, right_sample_indexes])
 
@@ -383,7 +365,7 @@ class DecisionTreeRegressor(DecisionTree):
         indexes = np.array(list(range(data.shape[0])))
 
         results, parent_indexes = self._node_predict(self._tree, data, indexes)
-        # print(len(results), len(parent_indexes))
+
         sorted_results = np.column_stack([parent_indexes, results])
         sorted_results = self._sort_matrix(sorted_results, sort_by_col=0)
         return sorted_results[:, 1:]
