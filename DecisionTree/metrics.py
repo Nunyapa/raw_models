@@ -165,6 +165,34 @@ class RmseCriterion(MseCriterion):
 
 
 
+# TODO: Implement ROC_AUC_METRIC
+
+class MetricBase:
+
+    def __init__(self):
+        pass
+
+class AucMetric(MetricBase):
+
+    def calculate(self, y_true, y_pred):
+        '''
+        :param y_true: np.array with real observation labels
+        :param y_pred: np.array with predicted observation labels or probabilities
+        :return: float, metric value
+        '''
+
+        sorted_matrix = np.dstack([y_true, y_pred])[0]
+        sorted_matrix = sorted_matrix[sorted_matrix[:, 1].argsort()]
+
+        n_observations = sorted_matrix.shape[0]
+        n_class_one = y_true.sum()
+        n_class_zero = n_observations - n_class_one
+
+
+
+
+
+
 #
 #
 # def entropy(probabilities):

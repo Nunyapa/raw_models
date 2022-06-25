@@ -8,7 +8,7 @@ class BaggingClass:
     Bagging is bootstrap aggregation.
 
     Builds an ensemble of decision trees which trains on training sets each of size N' and
-    all of them are sampling from the main Sample of size N. Each DT is training on a limit amount of features.
+    all of them are sampling from the main Sample of size N. Each DT is training on the limited amount of features.
     '''
 
     def __init__(self,
@@ -73,11 +73,17 @@ class BaggingClass:
 
 
     def compute_metric(self):
+        '''
+        If eval set is enable than it is necessary to calculate metric after an iterator is built.
+        :return: Metric value
+        '''
         pass
 
     def _fit(self, X, y, eval_set=(None, None)):
-        self.trees_info = {}
-        iterators_list = range(self.iterators)
+        self.trees_info = {
+            'n_iterators': 0
+        }
+        iterators_list = range(1, self.iterators + 1)
 
         for tree_idx in iterators_list:
             current_tree = DecisionTreeClassifier(**self.tree_params)
@@ -91,10 +97,17 @@ class BaggingClass:
                 'tree_info': sub_sample_info
             }
 
+            self.trees_info['n_iterators'] = tree_idx
             self.trees_info[tree_idx] = tree_info_dict
+
+            if eval_set != (None, None):
+                eval_preds = self.predict(X=eval_set[0])
+                metric_value = self.compute_metric(y_true=eval_set[1], y_pred=eval_preds)
+
+                # TODO: fit logger
 
 
     def fit(self, X, y, eval_set=(None, None)):
         # TODO: check for eval set
-        # TODO: Want to stop training if self.early_stopping steps was reached without metric improvement.
+        # TODO: Want to stop training if self.early_stopping steps was reached without metric improvement. (Only if eval set is available)
         pass
