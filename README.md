@@ -36,7 +36,7 @@ To use any of the implemented models, follow these general steps:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/raw_models.git
+   git clone https://github.com/Nunyapa/raw_models.git
    cd raw_models
    ```
 
