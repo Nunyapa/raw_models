@@ -1,5 +1,5 @@
 import numpy as np
-from .metrics import *
+from ..metrics.metrics import *
 
 BIG_CONST = 9999999
 SMALL_CONST = -9999999
