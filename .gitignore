@@ -1,1 +1,10 @@
-/checks.ipynb
+# logs
+**/logs/*
+**/*_log.*
+
+# system files
+**/.*
+!**/.gitignore
+
+# temp files
+**/__temp*
